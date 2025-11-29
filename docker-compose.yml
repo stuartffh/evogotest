@@ -1,0 +1,60 @@
+version: '3.8'
+
+services:
+  # Serviço do PostgreSQL
+  postgres:
+    image: postgres:16-alpine
+    container_name: evolution_postgres
+    restart: unless-stopped
+    environment:
+      # Variáveis de ambiente do PostgreSQL (definidas no .env)
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+    volumes:
+      # Persistência dos dados do banco de dados
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Serviço do Evolution-Go
+  evolution-go:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: evolution_go
+    restart: unless-stopped
+    ports:
+      # Porta de acesso à API (padrão 4000)
+      - "4000:4000"
+    environment:
+      # Variáveis de ambiente do Evolution-Go (definidas no .env)
+      SERVER_PORT: 4000
+      GLOBAL_API_KEY: ${GLOBAL_API_KEY}
+      CLIENT_NAME: ${CLIENT_NAME}
+      DATABASE_SAVE_MESSAGES: ${DATABASE_SAVE_MESSAGES}
+      WADEBUG: ${WADEBUG}
+      LOGTYPE: ${LOGTYPE}
+      
+      # Conexão com o PostgreSQL
+      # O EasyPanel deve usar o nome do serviço 'postgres' como host
+      POSTGRES_AUTH_DB: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}?sslmode=disable
+      POSTGRES_USERS_DB: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}?sslmode=disable
+    
+    # Garante que o evolution-go só inicie após o PostgreSQL estar pronto
+    depends_on:
+      postgres:
+        condition: service_healthy
+    
+    volumes:
+      # Persistência dos dados de sessão do WhatsApp e logs
+      - evolution_data:/app/data
+      - evolution_logs:/app/logs
+
+volumes:
+  postgres_data:
+  evolution_data:
+  evolution_logs:
